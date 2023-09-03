@@ -12,7 +12,7 @@ public class MapReduce {
         String inputText = "proyecto1/src/main/java/proyecto1/bigbible.txt";
         String outputDirectory = "proyecto1/src/main/java/proyecto1/";
         int chunkSize = 17 * 1024 * 1024;
-        // FileSplitter.splitFile(inputText, outputDirectory, chunkSize);
+        FileSplitter.splitFile(inputText, outputDirectory, chunkSize);
 
         /*** MAPPER ***/
 
