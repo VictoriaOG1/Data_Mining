@@ -18,6 +18,7 @@ public class ReduceClass implements Runnable {
     private int outputNumber;
     private int counter;
     private String filePath;
+    private boolean mapperFail;
     private Map<String, Integer> map;
     private Map<String, Integer> sorted;
     private CountDownLatch latch;
@@ -26,22 +27,23 @@ public class ReduceClass implements Runnable {
         this.latch = latch;
         this.id = id;
         this.counter = 0;
+        this.mapperFail = false;
         this.outputNumber = outputNumber;
         this.map = new HashMap<>();
     }
 
     public void setPathToRead(String filePath) {
-        this.filePath = filePath;
+        synchronized (this) {
+            this.filePath = filePath;
+        }
     }
 
     public String getPathToRead() {
         return this.filePath;
     }
 
-    public void setFilePath(String path) {
-        synchronized (this) {
-            this.filePath = path;
-        }
+    public void setMaperFailtoTrue() {
+        this.mapperFail = true;
     }
 
     public Map<String, Integer> getSortedMap() {
@@ -124,9 +126,16 @@ public class ReduceClass implements Runnable {
 
     public synchronized void run() {
         try {
-            System.out.println("Reducer con id " + id + " empezo");
-            readReduce();
-            System.out.println("Reducer con id " + id + " termino");
+
+            if (mapperFail == true) {
+                System.out.println("Reducer con id " + id + " termino, no hubo procesamiento de datos");
+            } else {
+                System.out.println("Reducer con id " + id + " empezo");
+                readReduce();
+                System.out.println("Reducer con id " + id + " termino");
+
+            }
+            mapperFail = false;
             counter++;
             if (counter == outputNumber) {
                 write();

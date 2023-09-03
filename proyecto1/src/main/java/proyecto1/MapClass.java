@@ -38,6 +38,14 @@ public class MapClass implements Runnable {
         return this.multimap;
     }
 
+    public void setChunkNumber(int chunkNumber) {
+        this.chunkNumber = chunkNumber;
+    }
+
+    public void end() {
+        latch.countDown();
+    }
+
     public synchronized void write() {
         String path = "proyecto1/src/main/java/proyecto1/outputMapper" + id + ".txt";
 
@@ -72,7 +80,7 @@ public class MapClass implements Runnable {
             write();
             System.out.println("Mapper con id " + id + " termino");
             counter++;
-            if (counter == chunkNumber) {
+            if (counter >= chunkNumber) {
                 latch.countDown();
             }
 
