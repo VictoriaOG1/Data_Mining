@@ -12,6 +12,10 @@ import java.util.concurrent.Future;
 public class MapReduce {
     public static void main(String[] args) {
 
+        int coordinatorfail = -1;
+        int nodetoFail = 0;
+        int reducerFail = -1;
+
         // Creacion de chunks del archivo de 1GB
         String inputText = "proyecto1/src/main/java/proyecto1/bigbible.txt";
         String outputDirectory = "proyecto1/src/main/java/proyecto1/";
@@ -45,113 +49,132 @@ public class MapReduce {
             futuresMapperList.add(mapExecutor.submit(mapperArray.get(nMapper)));
         }
 
-        int nodetoFail = 0;
-        System.out.println("Fallo en el nodo/hilo numero: " + nodetoFail);
-        // Se elimina de la lista
-        mapperArray.get(nodetoFail).end();
-        mapperArray.remove(nodetoFail);
-        // Cancelacion de todos los hilos pertenecientes a ese nodo y eliminacion de
-        // tareas
-
-        int newNMapper = 0;
-        for (int i = nodetoFail; i < 60; i += 6) {
-            System.out.println("Fallo, cancelando mapeo de chunk " + i + " correspondiente al nodo " + nodetoFail);
-            futuresMapperList.get(i).cancel(true);
-            newNMapper++;
-            if (newNMapper > 4) {
-                newNMapper = newNMapper % 5;
-            }
-            String chunkNewFilePath = outputDirectory + "chunk" + (i + 1) + ".txt";
-            mapperArray.get(newNMapper).setPathToRead(chunkNewFilePath);
-            mapperArray.get(newNMapper).setChunkNumber(12);
-            futuresMapperList.set(i, mapExecutor.submit(mapperArray.get(newNMapper)));
-        }
-
-        try {
-            // Esperar hasta que todos los hilos mapper hayan terminado
-            latchMapper.await();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        String pathOutput = "proyecto1/src/main/java/proyecto1/";
-        String filename = pathOutput + "outputMapper" + (nodetoFail + 1) + ".txt";
-        try {
-            Files.deleteIfExists(Paths.get(filename));
-            System.out.println("Se ha eliminado el archivo " + filename);
-        } catch (IOException e) {
-            System.err.println("Error al eliminar el archivo, no existe." + filename + ": " + e.getMessage());
-        }
-
-        // Apagar el ExecutorService después de que todos los trabajos mapper estén
-        // completos
-        mapExecutor.shutdownNow();
-
-        System.out.println("Todos los hilos mapper han terminado");
-
-        /*** REDUCER ***/
-
-        // Crear nodos reducer
-        ArrayList<ReduceClass> reducerArray = new ArrayList<>();
-
-        // Crear pools de hilos para nodos reduce
-        int numberThreadsReducer = 3;
-        ExecutorService reducerExecutor = Executors.newFixedThreadPool(numberThreadsReducer);
-
-        // Utilizar CountDownLatch para esperar a que todos los hilos terminen
-        CountDownLatch latchReducer = new CountDownLatch(numberThreadsReducer);
-
-        for (int nOutputM = 0; nOutputM < 6; nOutputM++) {
-
-            if (nOutputM < numberThreadsReducer) {
-                reducerArray.add(
-                        new ReduceClass(nOutputM + 1, (int) 6 / numberThreadsReducer, latchReducer));
+        if (nodetoFail != -1) {
+            System.out.println("Fallo en el nodo numero: " + nodetoFail);
+            // Se elimina de la lista
+            mapperArray.get(nodetoFail).end();
+            mapperArray.remove(nodetoFail);
+            // Cancelacion de todos los hilos pertenecientes a ese nodo y eliminacion de
+            // tareas
+            int newNMapper = 0;
+            for (int i = nodetoFail; i < 60; i += 6) {
+                System.out.println("Fallo, cancelando mapeo de chunk " + i +
+                        " correspondiente al nodo " + nodetoFail);
+                futuresMapperList.get(i).cancel(true);
+                newNMapper++;
+                if (newNMapper > 4) {
+                    newNMapper = newNMapper % 5;
+                }
+                String chunkNewFilePath = outputDirectory + "chunk" + (i + 1) + ".txt";
+                mapperArray.get(newNMapper).setPathToRead(chunkNewFilePath);
+                mapperArray.get(newNMapper).setChunkNumber(12);
+                futuresMapperList.set(i, mapExecutor.submit(mapperArray.get(newNMapper)));
             }
 
-            String outputMFilePath = outputDirectory + "outputMapper" + (nOutputM + 1) + ".txt";
-            int nReducer = nOutputM % numberThreadsReducer;
-            reducerArray.get(nReducer).setPathToRead(outputMFilePath);
-            if (nodetoFail == nOutputM) {
-                reducerArray.get(nReducer).setMaperFailtoTrue();
+            String filename = outputDirectory + "outputMapper" + (nodetoFail + 1) + ".txt";
+            try {
+                Files.deleteIfExists(Paths.get(filename));
+                System.out.println("Se ha eliminado el archivo " + filename);
+            } catch (IOException e) {
+                System.err.println("Error al eliminar el archivo, no existe." + filename +
+                        ": " + e.getMessage());
             }
-            reducerExecutor.execute(reducerArray.get(nReducer));
         }
 
-        try {
-            // Esperar hasta que todos los hilos mapper hayan terminado
-            latchReducer.await();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        if (coordinatorfail != -1) {
+
+            futuresMapperList.stream().forEach(x -> x.cancel(true));
+
+            mapExecutor.shutdownNow();
+
+            System.out.println("Falla en el nodo coordinador, se termina de ejecutar todo");
+
+        } else {
+
+            try {
+                // Esperar hasta que todos los hilos mapper hayan terminado
+                latchMapper.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            // Apagar el ExecutorService después de que todos los trabajos mapper estén
+            // completos
+            mapExecutor.shutdownNow();
+
+            System.out.println("Todos los hilos mapper han terminado");
+
+            /*** REDUCER ***/
+
+            // Crear nodos reducer
+            ArrayList<ReduceClass> reducerArray = new ArrayList<>();
+
+            // Crear pools de hilos para nodos reduce
+            int numberThreadsReducer = 3;
+            ExecutorService reducerExecutor = Executors.newFixedThreadPool(numberThreadsReducer);
+
+            // Utilizar CountDownLatch para esperar a que todos los hilos terminen
+            CountDownLatch latchReducer = new CountDownLatch(numberThreadsReducer);
+
+            // Arreglo de tareas hechas submit de reducer
+            ArrayList<Future<?>> futuresReducerList = new ArrayList<>();
+
+            for (int nOutputM = 0; nOutputM < 6; nOutputM++) {
+
+                if (nOutputM < numberThreadsReducer) {
+                    reducerArray.add(
+                            new ReduceClass(nOutputM + 1, (int) 6 / numberThreadsReducer, latchReducer));
+                }
+
+                String outputMFilePath = outputDirectory + "outputMapper" + (nOutputM + 1) + ".txt";
+                int nReducer = nOutputM % numberThreadsReducer;
+                reducerArray.get(nReducer).setPathToRead(outputMFilePath);
+                if (nodetoFail == nOutputM) {
+                    reducerArray.get(nReducer).setMaperFailtoTrue();
+                }
+                futuresReducerList.add(reducerExecutor.submit(reducerArray.get(nReducer)));
+            }
+
+            if (reducerFail != 1) {
+
+            }
+
+            try {
+                // Esperar hasta que todos los hilos mapper hayan terminado
+                latchReducer.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            // Apagar el ExecutorService después de que todos los trabajos mapper estén
+            // completos
+            reducerExecutor.shutdownNow();
+
+            System.out.println("Todos los hilos reducer han terminado");
+
+            /*** FINAL REDUCER ***/
+            // Crear pools de hilos para nodos reduce
+            // Utilizar CountDownLatch para esperar a que todos los hilos terminen
+            CountDownLatch finalReducerLatch = new CountDownLatch(1);
+
+            ExecutorService finalReducerExecutor = Executors.newFixedThreadPool(1);
+            ReduceClass finalReducer = new ReduceClass(0, 3, finalReducerLatch);
+
+            for (int nOutputR = 0; nOutputR < 3; nOutputR++) {
+                String outputRFilePath = outputDirectory + "outputReducer" + (nOutputR + 1) +
+                        ".txt";
+                finalReducer.setPathToRead(outputRFilePath);
+                finalReducerExecutor.execute(finalReducer);
+            }
+
+            try {
+                // Esperar hasta que el hilo reduce haya terminado
+                finalReducerLatch.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            finalReducerExecutor.shutdownNow();
         }
-
-        // Apagar el ExecutorService después de que todos los trabajos mapper estén
-        // completos
-        reducerExecutor.shutdownNow();
-
-        System.out.println("Todos los hilos reducer han terminado");
-
-        /*** FINAL REDUCER ***/
-        // Crear pools de hilos para nodos reduce
-        // Utilizar CountDownLatch para esperar a que todos los hilos terminen
-        CountDownLatch finalReducerLatch = new CountDownLatch(1);
-
-        ExecutorService finalReducerExecutor = Executors.newFixedThreadPool(1);
-        ReduceClass finalReducer = new ReduceClass(0, 3, finalReducerLatch);
-
-        for (int nOutputR = 0; nOutputR < 3; nOutputR++) {
-            String outputRFilePath = outputDirectory + "outputReducer" + (nOutputR + 1) +
-                    ".txt";
-            finalReducer.setPathToRead(outputRFilePath);
-            finalReducerExecutor.execute(finalReducer);
-        }
-
-        try {
-            // Esperar hasta que el hilo reduce haya terminado
-            finalReducerLatch.await();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        finalReducerExecutor.shutdownNow();
     }
 }
