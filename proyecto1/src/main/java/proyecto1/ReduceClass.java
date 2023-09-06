@@ -18,7 +18,6 @@ public class ReduceClass implements Runnable {
     private int outputNumber;
     private int counter;
     private String filePath;
-    private boolean mapperFail;
     private Map<String, Integer> map;
     private Map<String, Integer> sorted;
     private CountDownLatch latch;
@@ -27,9 +26,9 @@ public class ReduceClass implements Runnable {
         this.latch = latch;
         this.id = id;
         this.counter = 0;
-        this.mapperFail = false;
         this.outputNumber = outputNumber;
         this.map = new HashMap<>();
+        this.map.clear();
     }
 
     public void setPathToRead(String filePath) {
@@ -40,10 +39,6 @@ public class ReduceClass implements Runnable {
 
     public String getPathToRead() {
         return this.filePath;
-    }
-
-    public void setMaperFailtoTrue() {
-        this.mapperFail = true;
     }
 
     public Map<String, Integer> getSortedMap() {
@@ -59,6 +54,11 @@ public class ReduceClass implements Runnable {
                         Map.Entry::getValue,
                         (oldValue, newValue) -> oldValue, LinkedHashMap::new));
 
+    }
+
+    public void reset() {
+        this.counter = 0;
+        this.map = new HashMap<>();
     }
 
     public synchronized void readReduce() {
@@ -87,7 +87,8 @@ public class ReduceClass implements Runnable {
             bufferedReader.close();
 
         } catch (IOException e) {
-            e.printStackTrace();
+            // e.printStackTrace();
+            System.out.print("");
         }
     }
 
@@ -126,16 +127,9 @@ public class ReduceClass implements Runnable {
 
     public synchronized void run() {
         try {
-
-            if (mapperFail == true) {
-                System.out.println("Reducer con id " + id + " termino, no hubo procesamiento de datos");
-            } else {
-                System.out.println("Reducer con id " + id + " empezo");
-                readReduce();
-                System.out.println("Reducer con id " + id + " termino");
-
-            }
-            mapperFail = false;
+            System.out.println("Reducer con id " + id + " empezo");
+            readReduce();
+            System.out.println("Reducer con id " + id + " termino");
             counter++;
             if (counter == outputNumber) {
                 write();
@@ -145,7 +139,7 @@ public class ReduceClass implements Runnable {
         } catch (Exception e) {
             System.out.println(
                     "Error ejecutando el recucer en archivo " + filePath + "finalizando reducer de esta seccion.");
-            latch.countDown();
+            // latch.countDown();
         }
     }
 }

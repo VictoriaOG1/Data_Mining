@@ -13,7 +13,7 @@ public class MapReduce {
     public static void main(String[] args) {
 
         int coordinatorfail = -1;
-        int nodetoFail = 0;
+        int nodetoFail = -1;
         int reducerFail = -1;
 
         // Creacion de chunks del archivo de 1GB
@@ -24,6 +24,7 @@ public class MapReduce {
 
         /*** MAPPER ***/
 
+        /* */
         // Crear nodos mapper
         ArrayList<MapClass> mapperArray = new ArrayList<>();
 
@@ -46,11 +47,12 @@ public class MapReduce {
             int nMapper = nChunk % numberThreadsMapper;
             mapperArray.get(nMapper).setPathToRead(chunkFilePath);
             // mapExecutor.execute(mapperArray.get(nMapper));
+
             futuresMapperList.add(mapExecutor.submit(mapperArray.get(nMapper)));
         }
 
         if (nodetoFail != -1) {
-            System.out.println("Fallo en el nodo numero: " + nodetoFail);
+            System.out.println("Fallo en el nodo numero: " + (nodetoFail + 1));
             // Se elimina de la lista
             mapperArray.get(nodetoFail).end();
             mapperArray.remove(nodetoFail);
@@ -58,8 +60,8 @@ public class MapReduce {
             // tareas
             int newNMapper = 0;
             for (int i = nodetoFail; i < 60; i += 6) {
-                System.out.println("Fallo, cancelando mapeo de chunk " + i +
-                        " correspondiente al nodo " + nodetoFail);
+                System.out.println("Fallo, cancelando mapeo de chunk " + (i + 1) +
+                        " correspondiente al nodo " + (nodetoFail + 1));
                 futuresMapperList.get(i).cancel(true);
                 newNMapper++;
                 if (newNMapper > 4) {
@@ -122,21 +124,36 @@ public class MapReduce {
             for (int nOutputM = 0; nOutputM < 6; nOutputM++) {
 
                 if (nOutputM < numberThreadsReducer) {
-                    reducerArray.add(
-                            new ReduceClass(nOutputM + 1, (int) 6 / numberThreadsReducer, latchReducer));
+                    if (nOutputM == nodetoFail) {
+                        reducerArray.add(new ReduceClass(nOutputM + 1, 1, latchReducer));
+                    } else {
+                        reducerArray.add(new ReduceClass(nOutputM + 1, (int) 6 / numberThreadsReducer, latchReducer));
+                    }
+                }
+                if (nOutputM == nodetoFail) {
+                    System.out.println("");
+                } else {
+                    String outputMFilePath = outputDirectory + "outputMapper" + (nOutputM + 1) + ".txt";
+                    int nReducer = nOutputM % numberThreadsReducer;
+                    reducerArray.get(nReducer).setPathToRead(outputMFilePath);
+                    futuresReducerList.add(reducerExecutor.submit(reducerArray.get(nReducer)));
                 }
 
-                String outputMFilePath = outputDirectory + "outputMapper" + (nOutputM + 1) + ".txt";
-                int nReducer = nOutputM % numberThreadsReducer;
-                reducerArray.get(nReducer).setPathToRead(outputMFilePath);
-                if (nodetoFail == nOutputM) {
-                    reducerArray.get(nReducer).setMaperFailtoTrue();
-                }
-                futuresReducerList.add(reducerExecutor.submit(reducerArray.get(nReducer)));
             }
 
-            if (reducerFail != 1) {
+            if (reducerFail != -1) {
+                System.out.println("Fallo en el nodo numero: " + (reducerFail + 1) + "se reinicia el nodo");
+                // Se resetea nodo Reducer
+                reducerArray.get(reducerFail).reset();
 
+                // Cancelacion de todos los tasks pertenecientes a ese nodo
+                int newNReducer = 0;
+                for (int i = reducerFail; i < 6; i += 3) {
+                    futuresReducerList.get(i).cancel(true);
+                    String chunkNewFilePath = outputDirectory + "ouputMapper" + (i + 1) + ".txt";
+                    reducerArray.get(newNReducer).setPathToRead(chunkNewFilePath);
+                    futuresReducerList.set(i, reducerExecutor.submit(reducerArray.get(newNReducer)));
+                }
             }
 
             try {
@@ -165,6 +182,12 @@ public class MapReduce {
                         ".txt";
                 finalReducer.setPathToRead(outputRFilePath);
                 finalReducerExecutor.execute(finalReducer);
+
+                try {
+                    Thread.sleep(3000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
 
             try {
