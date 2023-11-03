@@ -25,3 +25,7 @@ proyecto3/all_reviews.txt
 proyecto3/word_count_by_review
 proyecto3/word_count_all_reviews.txt
 proyecto7/untitled_project
+venv/
+dataMining-env/
+virtualenv/
+.vscode/
