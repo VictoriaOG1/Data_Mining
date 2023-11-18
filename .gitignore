@@ -30,3 +30,5 @@ dataMining-env/
 virtualenv/
 .vscode/
 proyecto9/animals
+proyecto9/resnet_fold_1.h5
+proyecto9/resnet_fold_2.h5
